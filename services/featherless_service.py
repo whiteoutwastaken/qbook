@@ -111,17 +111,11 @@ class FeatherlessService:
         prompt = (
             f"Topic: {lesson.topic}\n\n"
             f"Lesson text:\n{lesson.text[:1500]}\n\n"
-            f"Decide if images would significantly help a student understand this topic.\n"
-            f"Also decide if a brief background summary would help contextualize it.\n\n"
-            f"Respond ONLY in this exact JSON format:\n"
-            f'{{\n'
-            f'  "needs_images": true or false,\n'
-            f'  "image_queries": ["query1", "query2"],\n'
-            f'  "needs_summary": true or false,\n'
-            f'  "source_summaries": ["One sentence summary of key background context."]\n'
-            f'}}'
+            "Decide if images would significantly help a student understand this topic.\n"
+            "Also decide if a brief background summary would help contextualize it.\n\n"
+            "Respond ONLY in this exact JSON format:\n"
+            '{"needs_images": true, "image_queries": ["query1", "query2"], "needs_summary": true, "source_summaries": ["One sentence summary."]}'
         )
-
         try:
             raw = self._chat(
                 system=(
@@ -226,7 +220,7 @@ class FeatherlessService:
                                     "CAMERA NOTE: The camera may be above, left, or right of the screen. "
                                     "Slight gaze offset is NORMAL — do not count it as distracted.\n\n"
                                     "- focused: neutral, relaxed, no strong reaction\n"
-                                    "- confused: 2+ signals needed — furrowed brow AND squinting, "
+                                    "- confused: 2+ signals needed — furrowed brow (if brow is visibly furrowed, they are FOR SURE confused) or squinting, "
                                     "or head tilt AND lip press, or visibly lost expression\n"
                                     "- nodding: clear up-down head movement\n"
                                     "- distracted: fully looking away, turned head, eyes closed, "
@@ -263,7 +257,15 @@ class FeatherlessService:
             )
 
         except Exception as e:
-            print(f"[Featherless] Face analysis failed: {e}")
+            try:
+                analysis = self.featherless.analyze_face(frame_path, frame_b64, fmt)
+            except Exception as e:
+                err = str(e)
+                print(f"[FacialMonitor] Face analysis failed: {e}")
+                if "429" in err or "concurrency" in err.lower():
+                    print(f"[FacialMonitor] Rate limited — backing off 10s")
+                    time.sleep(10.0)
+                analysis = None
             return FaceAnalysis(state="unknown", confidence=0.0, note=str(e))
 
     # ── 5. Simplify Chunk ─────────────────────────────────────────────────────
@@ -323,18 +325,19 @@ class FeatherlessService:
                 clean_lines.append(line)
         return "\n".join(clean_lines).strip(), image_queries
 
-    def _dedupe_queries(self, queries: list[str], max: int = 3) -> list[str]:
+    def _dedupe_queries(self, queries: list[str], max_count: int = 3) -> list[str]:
         seen_words, unique = [], []
         for query in queries:
             words = set(query.lower().split())
+            word_count = len(words) if len(words) > 0 else 1
             is_duplicate = any(
-                len(words & seen) / max(len(words), 1) > 0.6
+                len(words & seen) / word_count > 0.6
                 for seen in seen_words
             )
             if not is_duplicate:
                 unique.append(query)
                 seen_words.append(words)
-            if len(unique) >= max:
+            if len(unique) >= max_count:
                 break
         return unique
 

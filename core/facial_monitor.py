@@ -40,8 +40,8 @@ if TYPE_CHECKING:
 # ── Config ────────────────────────────────────────────────────────────────────
 
 ANALYSIS_INTERVAL    = 0.5
-API_COOLDOWN         = 1.0
-SMOOTHING_COUNT      = 2
+API_COOLDOWN         = 2.0
+SMOOTHING_COUNT      = 1
 JPEG_QUALITY         = 80
 DEFAULT_CAMERA_INDEX = 0
 IGNORED_STATES       = {"unknown", "focused"}
